@@ -29,15 +29,26 @@ long-duration data point**, not to claim a first.
 | | |
 |---|---|
 | GPU | AMD Radeon AI PRO R9700, 32 GB, `gfx1201` (RDNA 4, Navi 48) |
-| CPU / RAM | x86-64 host, see §6 caveat on **shared** system RAM |
 | OS | **Windows 11** |
-| Backend | **HIP** (`rocblas` / `hipBLASLt`) |
+| Backend | **HIP** (`backend: "hip"`, `lib_dirs: engine/rocm/bin`) |
 | Engine | Strata **v0.1.34** — *behind current; see §5* |
-| Quant | Qwen3.8-Flash-Next **IQ2_XS** |
-| Context | 131,072 |
-| Sampling flags | `--spec 4`, `--kv int8`, `--kv-resident 32768`, `--expert-cache auto`, `--prefill auto` |
+| Quant | Qwen3.8-Flash-Next **IQ2_XS** (GSQ-RCO, 2-shard GGUF + PLE) |
+| Context | 131,072 (`--max-context`) |
+| KV | `--kv int8`, `--kv-resident 32768` |
+| Speculation | `--spec 4`, `--spec-min-p 0.5`, MTP |
+| Other | `--expert-cache auto`, `--prefill auto`, `--expert-profile data/expert-profile.bin` |
+| Tuning env | `STRATA_HIPBLASLT_TUNING=tools/hip/gfx1201-hipblaslt-100500.txt` |
 
-Launch path: `serve/server.py --engine strata --config strata-iq2_xs.json --port 8081`.
+Exact argument list (from the live process config):
+
+```
+strata.exe --pack <packs/iq2_xs> --native <...-00001-of-00002.gguf>
+  --ple-gguf <...-00002-of-00002.gguf> --expert-profile data/expert-profile.bin
+  --expert-cache auto --prefill auto --spec 4 --spec-min-p 0.5 --mtp <mtp/rt>
+  --max-context 131072 --kv int8 --kv-resident 32768
+```
+
+Served through `serve/server.py --engine strata --config <cfg>.json --port 8081`.
 
 ---
 
@@ -59,11 +70,17 @@ A fixed short prompt, 96 output tokens, **every 10 minutes for ~3 days**
 | Prefill max | 149.6 tok/s |
 | **MTP acceptance** | **1.000** (median and mean) |
 
-**Reading this honestly:** the median is well below the best case. Short prompts
-and a shared machine mean the distribution is wide — quote the **median (66)** or
-the **p10 (35)** as the "typical" figure, and treat **~93–113 tok/s** as the
-achievable ceiling on a quiet machine. Anyone quoting only the peak is
-cherry-picking.
+**Reading this honestly:** the soak ran on a **shared desktop** — it is a
+*mixed-condition* number, not a quiet-machine benchmark. The recent
+steady-state samples (§3.2) show **~73–92 tok/s** when the machine is otherwise
+idle. So:
+
+- **Quote 66 tok/s** as "typical on a working desktop".
+- **Quote ~90 tok/s** as "idle machine, warm".
+- **113 tok/s** is the observed ceiling — do not present it as typical.
+
+Anyone quoting only the peak is cherry-picking. We publish the p10 (35) for the
+same reason: it is what you get when the box is busy.
 
 ### 3.2 Sustained single-stream, warm
 
@@ -152,13 +169,20 @@ have not applied this** — see §5, it is our top pending item.
 
 ---
 
-## 6. Caveat on "32 GB"
+## 6. Caveat: the Windows VRAM budget
 
-32 GB of dedicated VRAM is **not** 32 GB of usable model budget on a desktop
-Windows machine. The WDDM budget, the compositor, and (in a UMA-adjacent
-configuration) system RAM pressure all take a cut. This is exactly the class of
-bug that v0.1.37 fixed. Budget conservatively and measure — do not size a model
-against the sticker number.
+The card is a **discrete** 32 GB board — but on Windows you do not get to treat
+all 32 GB as model budget. The **WDDM budget** (what Windows will let a process
+allocate, accounting for the desktop compositor and other clients) is the number
+the engine has to plan around, and it is smaller than the sticker figure.
+
+This is precisely the class of bug fixed in **v0.1.37**, whose notes explain that
+the engine had been failing to count the desktop's VRAM, causing the expert cache
+to spill into system RAM. If you are on an older build and your cache behaviour
+looks inexplicable, this is the first thing to check.
+
+Practical advice: budget conservatively, and prefer measuring the engine's own
+reported free/total over assuming the sticker number.
 
 ---
 
