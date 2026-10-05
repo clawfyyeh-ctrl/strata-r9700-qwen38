@@ -1,0 +1,28 @@
+{
+  "samples_total": 402,
+  "samples_ok": 396,
+  "success_rate_pct": 98.5,
+  "window_start": "2026-10-02T14:15:14+08:00",
+  "window_end": "2026-10-05T08:00:47+08:00",
+  "decode_tps": {
+    "n": 396,
+    "median": 66.4,
+    "mean": 64.3,
+    "min": 19.3,
+    "max": 112.6,
+    "p10": 34.6,
+    "p90": 98.7
+  },
+  "prefill_tps": {
+    "n": 396,
+    "median": 54.9,
+    "mean": 57.2,
+    "min": 9.8,
+    "max": 149.6
+  },
+  "mtp_accept": {
+    "median": 1.0,
+    "mean": 1.0
+  },
+  "prompt": "fixed short prompt, 96 output tokens, every 10 min"
+}
